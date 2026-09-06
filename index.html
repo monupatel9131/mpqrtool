@@ -1181,4 +1181,387 @@
         function setupTheme() {
             const toggle = document.getElementById('theme-toggle');
             const savedTheme = localStorage.getItem('mpqr_theme');
-            if (savedTheme === 'dark'
+            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+            toggle.addEventListener('click', () => {
+                document.documentElement.classList.toggle('dark');
+                const isDark = document.documentElement.classList.contains('dark');
+                localStorage.setItem('mpqr_theme', isDark ? 'dark' : 'light');
+            });
+        }
+
+        function toggleAccordion(element) {
+            const content = element.nextElementSibling;
+            content.classList.toggle('open');
+        }
+
+        function showToast(message) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<span>i</span> <span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Search & Filtering
+        function renderTypeGrid() {
+            const grid = document.getElementById('type-grid');
+            grid.innerHTML = qrTypes.map(t => `
+                <div class="type-card ${t.id === currentType ? 'active' : ''}" id="type-btn-${t.id}" onclick="selectType('${t.id}')">
+                    <span style="font-size:1.2rem;">${t.icon}</span>
+                    <span>${t.name}</span>
+                </div>
+            `).join('');
+        }
+
+        function filterQrTypes() {
+            const query = document.getElementById('qr-search').value.toLowerCase();
+            qrTypes.forEach(t => {
+                const btn = document.getElementById(`type-btn-${t.id}`);
+                if (btn) {
+                    btn.style.display = t.name.toLowerCase().includes(query) ? 'flex' : 'none';
+                }
+            });
+        }
+
+        function renderShowcaseGrid() {
+            const grid = document.getElementById('showcase-grid');
+            grid.innerHTML = qrTypes.map(t => `
+                <div class="card" onclick="selectType('${t.id}'); window.scrollTo({top: document.getElementById('generator').offsetTop - 80, behavior:'smooth'});" style="cursor:pointer;">
+                    <div class="card-icon">${t.icon}</div>
+                    <h3>${t.name}</h3>
+                    <p style="color:var(--text-muted); font-size:0.85rem; margin-top:0.35rem;">Generate optimized QR codes for ${t.name.toLowerCase()} formats.</p>
+                </div>
+            `).join('');
+        }
+
+        function renderFaq() {
+            const container = document.getElementById('faq-accordion');
+            container.innerHTML = faqData.map((item, idx) => `
+                <div class="faq-item">
+                    <div class="faq-question" onclick="toggleFaq(${idx})">
+                        <span>${item.q}</span>
+                        <span id="faq-icon-${idx}">+</span>
+                    </div>
+                    <div class="faq-answer" id="faq-ans-${idx}">${item.a}</div>
+                </div>
+            `).join('');
+        }
+
+        function toggleFaq(idx) {
+            const ans = document.getElementById(`faq-ans-${idx}`);
+            const icon = document.getElementById(`faq-icon-${idx}`);
+            const isOpen = ans.classList.contains('open');
+            ans.classList.toggle('open');
+            icon.innerText = isOpen ? '+' : '−';
+        }
+
+        // Dynamic Form Switching
+        function selectType(typeId) {
+            currentType = typeId;
+            document.querySelectorAll('.type-card').forEach(c => c.classList.remove('active'));
+            const activeCard = document.getElementById(`type-btn-${typeId}`);
+            if (activeCard) activeCard.classList.add('active');
+
+            const formContainer = document.getElementById('dynamic-form');
+            formContainer.innerHTML = getFormFieldsHTML(typeId);
+            generateQR();
+        }
+
+        function getFormFieldsHTML(typeId) {
+            switch(typeId) {
+                case 'url':
+                    return `
+                        <div class="form-group">
+                            <label>Website URL *</label>
+                            <input type="url" id="field-url" class="form-control" placeholder="https://example.com" value="https://example.com" oninput="generateQR()">
+                        </div>`;
+                case 'text':
+                    return `
+                        <div class="form-group">
+                            <label>Plain Text *</label>
+                            <textarea id="field-text" class="form-control" placeholder="Enter any text..." oninput="generateQR()">Hello World!</textarea>
+                        </div>`;
+                case 'whatsapp':
+                    return `
+                        <div class="form-group">
+                            <label>Phone Number (With Country Code) *</label>
+                            <input type="tel" id="field-wa-phone" class="form-control" placeholder="e.g. 919131053539" value="919131053539" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Pre-filled Message</label>
+                            <input type="text" id="field-wa-msg" class="form-control" placeholder="Hello..." oninput="generateQR()">
+                        </div>`;
+                case 'phone':
+                    return `
+                        <div class="form-group">
+                            <label>Phone Number *</label>
+                            <input type="tel" id="field-phone" class="form-control" placeholder="+1234567890" value="+1234567890" oninput="generateQR()">
+                        </div>`;
+                case 'sms':
+                    return `
+                        <div class="form-group">
+                            <label>Phone Number *</label>
+                            <input type="tel" id="field-sms-phone" class="form-control" placeholder="+1234567890" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Message</label>
+                            <input type="text" id="field-sms-msg" class="form-control" placeholder="SMS Body..." oninput="generateQR()">
+                        </div>`;
+                case 'email':
+                    return `
+                        <div class="form-group">
+                            <label>Email Address *</label>
+                            <input type="email" id="field-email-addr" class="form-control" placeholder="name@domain.com" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Subject</label>
+                            <input type="text" id="field-email-sub" class="form-control" placeholder="Inquiry" oninput="generateQR()">
+                        </div>`;
+                case 'wifi':
+                    return `
+                        <div class="form-group">
+                            <label>Network SSID (Name) *</label>
+                            <input type="text" id="field-wifi-ssid" class="form-control" placeholder="My Home Wi-Fi" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Password</label>
+                            <input type="password" id="field-wifi-pass" class="form-control" placeholder="Password" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Encryption</label>
+                            <select id="field-wifi-type" class="form-control" onchange="generateQR()">
+                                <option value="WPA">WPA/WPA2</option>
+                                <option value="WEP">WEP</option>
+                                <option value="nopass">None</option>
+                            </select>
+                        </div>`;
+                case 'vcard':
+                    return `
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="field-vcard-name" class="form-control" placeholder="John Doe" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone Number</label>
+                            <input type="tel" id="field-vcard-phone" class="form-control" placeholder="+123456789" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="field-vcard-email" class="form-control" placeholder="john@domain.com" oninput="generateQR()">
+                        </div>`;
+                case 'upi':
+                    return `
+                        <div class="form-group">
+                            <label>UPI ID (VPA) *</label>
+                            <input type="text" id="field-upi-id" class="form-control" placeholder="merchant@upi" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Payee Name *</label>
+                            <input type="text" id="field-upi-name" class="form-control" placeholder="Merchant Store" oninput="generateQR()">
+                        </div>
+                        <div class="form-group">
+                            <label>Amount (Optional)</label>
+                            <input type="number" id="field-upi-amount" class="form-control" placeholder="100" oninput="generateQR()">
+                        </div>`;
+                default:
+                    return `
+                        <div class="form-group">
+                            <label>Input Content *</label>
+                            <input type="text" id="field-generic" class="form-control" placeholder="Enter details..." oninput="generateQR()">
+                        </div>`;
+            }
+        }
+
+        // Data Compilation & Encoding Logic
+        function getQRFormattedData() {
+            try {
+                switch(currentType) {
+                    case 'url':
+                        return document.getElementById('field-url')?.value.trim() || '';
+                    case 'text':
+                        return document.getElementById('field-text')?.value.trim() || '';
+                    case 'whatsapp': {
+                        const phone = document.getElementById('field-wa-phone')?.value.replace(/[^0-9]/g, '') || '';
+                        const msg = encodeURIComponent(document.getElementById('field-wa-msg')?.value || '');
+                        return phone ? `https://wa.me/${phone}${msg ? '?text=' + msg : ''}` : '';
+                    }
+                    case 'phone': {
+                        const ph = document.getElementById('field-phone')?.value.trim() || '';
+                        return ph ? `tel:${ph}` : '';
+                    }
+                    case 'sms': {
+                        const ph = document.getElementById('field-sms-phone')?.value.trim() || '';
+                        const msg = encodeURIComponent(document.getElementById('field-sms-msg')?.value || '');
+                        return ph ? `sms:${ph}${msg ? '?body=' + msg : ''}` : '';
+                    }
+                    case 'email': {
+                        const em = document.getElementById('field-email-addr')?.value.trim() || '';
+                        const sub = encodeURIComponent(document.getElementById('field-email-sub')?.value || '');
+                        return em ? `mailto:${em}${sub ? '?subject=' + sub : ''}` : '';
+                    }
+                    case 'wifi': {
+                        const ssid = document.getElementById('field-wifi-ssid')?.value || '';
+                        const pass = document.getElementById('field-wifi-pass')?.value || '';
+                        const type = document.getElementById('field-wifi-type')?.value || 'WPA';
+                        return ssid ? `WIFI:S:${ssid};T:${type};P:${pass};;` : '';
+                    }
+                    case 'vcard': {
+                        const name = document.getElementById('field-vcard-name')?.value || '';
+                        const phone = document.getElementById('field-vcard-phone')?.value || '';
+                        const email = document.getElementById('field-vcard-email')?.value || '';
+                        if (!name) return '';
+                        return `BEGIN:VCARD\nVERSION:3.0\nN:${name}\nTEL:${phone}\nEMAIL:${email}\nEND:VCARD`;
+                    }
+                    case 'upi': {
+                        const id = document.getElementById('field-upi-id')?.value.trim() || '';
+                        const name = encodeURIComponent(document.getElementById('field-upi-name')?.value.trim() || '');
+                        const amt = document.getElementById('field-upi-amount')?.value.trim() || '';
+                        return id ? `upi://pay?pa=${id}&pn=${name}${amt ? '&am=' + amt : ''}&cu=INR` : '';
+                    }
+                    default:
+                        return document.getElementById('field-generic')?.value.trim() || '';
+                }
+            } catch(e) {
+                return '';
+            }
+        }
+
+        // Live QR Code Generation Execution
+        function generateQR() {
+            const rawData = getQRFormattedData();
+            const qrContainer = document.getElementById('qrcode');
+            const statusLabel = document.getElementById('scan-status');
+
+            qrContainer.innerHTML = '';
+
+            if (!rawData) {
+                statusLabel.innerText = '⚠️ Incomplete Input Data';
+                statusLabel.style.color = 'var(--accent)';
+                return;
+            }
+
+            statusLabel.innerText = '✓ QR Ready';
+            statusLabel.style.color = 'var(--primary)';
+
+            const size = parseInt(document.getElementById('qr-size').value) || 300;
+            const fgColor = document.getElementById('fg-color').value || '#000000';
+            const bgColor = document.getElementById('bg-color').value || '#ffffff';
+            const correction = document.getElementById('error-correction').value || 'M';
+
+            // Safe Correction Level Mapping
+            let correctLevel = QRCode.CorrectLevel.M;
+            if (correction === 'L') correctLevel = QRCode.CorrectLevel.L;
+            if (correction === 'Q') correctLevel = QRCode.CorrectLevel.Q;
+            if (correction === 'H') correctLevel = QRCode.CorrectLevel.H;
+
+            try {
+                qrCodeInstance = new QRCode(qrContainer, {
+                    text: rawData,
+                    width: size,
+                    height: size,
+                    colorDark: fgColor,
+                    colorLight: bgColor,
+                    correctLevel: correctLevel
+                });
+            } catch(err) {
+                showToast('Failed to compile QR payload');
+            }
+        }
+
+        // Custom Overlay Logo Handler
+        function handleLogoUpload(e) {
+            const file = e.target.files[0];
+            const logoImg = document.getElementById('center-logo');
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    uploadedLogoData = evt.target.result;
+                    logoImg.src = uploadedLogoData;
+                    logoImg.style.display = 'block';
+                    showToast('Logo centered onto QR layout');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                uploadedLogoData = null;
+                logoImg.style.display = 'none';
+            }
+        }
+
+        function updateLabels() {
+            const titleInput = document.getElementById('qr-title-input').value;
+            document.getElementById('preview-title').innerText = titleInput;
+        }
+
+        function resetForm() {
+            selectType('url');
+            document.getElementById('qr-title-input').value = '';
+            document.getElementById('preview-title').innerText = '';
+            document.getElementById('center-logo').style.display = 'none';
+            document.getElementById('fg-color').value = '#000000';
+            document.getElementById('bg-color').value = '#ffffff';
+            uploadedLogoData = null;
+            showToast('Generator settings reset');
+        }
+
+        // Export Actions: Download, Copy, Print
+        function downloadQR(format) {
+            const canvas = document.querySelector('#qrcode canvas');
+            const img = document.querySelector('#qrcode img');
+
+            if (!canvas && !img) {
+                showToast('Please generate a valid QR code first');
+                return;
+            }
+
+            if (format === 'png') {
+                let dataURL = canvas ? canvas.toDataURL('image/png') : img.src;
+                const link = document.createElement('a');
+                link.download = `mpqrtool-${Date.now()}.png`;
+                link.href = dataURL;
+                link.click();
+                showToast('PNG QR downloaded successfully!');
+            } else if (format === 'svg') {
+                showToast('SVG download standard fallback activated');
+                let dataURL = canvas ? canvas.toDataURL('image/png') : img.src;
+                const link = document.createElement('a');
+                link.download = `mpqrtool-${Date.now()}.png`;
+                link.href = dataURL;
+                link.click();
+            }
+        }
+
+        async function copyQR() {
+            const canvas = document.querySelector('#qrcode canvas');
+            if (!canvas) {
+                showToast('No active QR canvas to copy');
+                return;
+            }
+
+            try {
+                canvas.toBlob(async (blob) => {
+                    const item = new ClipboardItem({ 'image/png': blob });
+                    await navigator.clipboard.write([item]);
+                    showToast('QR Image copied to clipboard!');
+                });
+            } catch (err) {
+                showToast('Clipboard access not permitted by browser');
+            }
+        }
+
+        function handleContactSubmit(e) {
+            e.preventDefault();
+            const name = document.getElementById('contact-name').value;
+            showToast(`Thank you, ${name}! Your message has been prepared.`);
+            e.target.reset();
+        }
+
+        function clearHistory() {
+            localStorage.removeItem('mpqr_history');
+            showToast('Local history cleared');
+        }
+    </script>
+</body>
+</html>
